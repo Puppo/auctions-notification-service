@@ -1,0 +1,43 @@
+service: auctions-notification-service
+
+plugins:
+  - serverless-bundle
+  - serverless-pseudo-parameters
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  memorySize: 256
+  stage: ${opt:stage, 'dev'}
+  region: eu-central-1
+  lambdaHashingVersion: 20201221
+  iam:
+    role:
+      statements:
+        - ${file(infrastructure/iam/SendEmailIAM.yml):SendEmailIAM}
+        - ${file(infrastructure/iam/MailQueueIAM.yml):MailQueueIAM}
+  environment:
+    SES_SOURCE: ${file(./serverless.env.yml):${self:provider.stage}.SES_SOURCE}
+
+resources:
+  Resources:
+    MailQueue: ${file(infrastructure/resources/MailQueue.yml):MailQueue}
+  Outputs:
+    MailQueueArn: ${file(infrastructure/resources/MailQueue.yml):Outputs.MailQueueArn}
+    MailQueueUrl: ${file(infrastructure/resources/MailQueue.yml):Outputs.MailQueueUrl}
+
+functions:
+  sendEmail:
+    handler: src/handlers/sendEmail.handler
+    events:
+      - sqs:
+          arn: ${self:custom.mailQueue.arn}
+          batchSize: 1
+
+custom:
+  mailQueue:
+    name: ${self:service}-mail-queue-${self:provider.stage}
+    arn: !GetAtt MailQueue.Arn
+    url: !Ref MailQueue
+  bundle:
+    linting: false
